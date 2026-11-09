@@ -40,7 +40,7 @@ AeroGate is a scroll-driven 3D website that follows a passenger through an airpo
 **Requirements:** Node.js **24+** and npm.
 
 ```bash
-git clone https://github.com/x2zu/AeroGate-Website.git
+git clone https://github.com/x4zu/AeroGate-Website.git
 cd AeroGate-Website
 npm install
 npm run dev

@@ -51,7 +51,7 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com/x2zu/AeroGate-Website"
+            href="https://github.com/x4zu/AeroGate-Website"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Lihat source code di GitHub"

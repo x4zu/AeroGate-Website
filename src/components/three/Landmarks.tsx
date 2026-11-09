@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { Interactive, type SelectHandler } from "./Fleet";
 import { useModel } from "./useModel";
@@ -124,64 +124,6 @@ const TREES: [number, number][] = [
   [160, 28],
 ];
 
-/** Instanced clouds — dense over the cruise corridor east of the airport. */
-function Clouds() {
-  const ref = useRef<THREE.InstancedMesh>(null);
-  const puffs = useMemo(() => {
-    const out: { base: THREE.Vector3; r: number; drift: number }[] = [];
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const clouds: [number, number, number][] = [];
-    for (let i = 0; i < 34; i++) clouds.push([140 + rnd() * 420, 20 + rnd() * 10, -80 + rnd() * 200]);
-    for (let i = 0; i < 8; i++) clouds.push([-260 + rnd() * 120, 70 + rnd() * 20, -160 + rnd() * 320]);
-    for (const [cx, cy, cz] of clouds) {
-      const n = 4 + Math.floor(rnd() * 4);
-      const drift = 0.6 + rnd() * 0.8;
-      for (let k = 0; k < n; k++) {
-        out.push({
-          base: new THREE.Vector3(cx + (rnd() - 0.5) * 16, cy + (rnd() - 0.3) * 3, cz + (rnd() - 0.5) * 8),
-          r: 3 + rnd() * 4,
-          drift,
-        });
-      }
-    }
-    return out;
-  }, []);
-  const m = useMemo(() => new THREE.Matrix4(), []);
-  const p = useMemo(() => new THREE.Vector3(), []);
-  const q = useMemo(() => new THREE.Quaternion(), []);
-  const s = useMemo(() => new THREE.Vector3(), []);
-  useLayoutEffect(() => {
-    const im = ref.current;
-    if (!im) return;
-    puffs.forEach((pf, i) => {
-      s.setScalar(pf.r);
-      m.compose(pf.base, q, s);
-      im.setMatrixAt(i, m);
-    });
-    im.instanceMatrix.needsUpdate = true;
-  }, [puffs, m, q, s]);
-  useFrame(({ clock }) => {
-    const im = ref.current;
-    if (!im) return;
-    const t = clock.elapsedTime;
-    puffs.forEach((pf, i) => {
-      p.copy(pf.base);
-      p.x += Math.sin(t * 0.05 * pf.drift + i) * 4;
-      s.setScalar(pf.r);
-      m.compose(p, q, s);
-      im.setMatrixAt(i, m);
-    });
-    im.instanceMatrix.needsUpdate = true;
-  });
-  return (
-    <instancedMesh ref={ref} args={[undefined, undefined, puffs.length]} frustumCulled={false}>
-      <icosahedronGeometry args={[1, 2]} />
-      <meshStandardMaterial color="#ffffff" roughness={1} emissive="#ffffff" emissiveIntensity={0.15} />
-    </instancedMesh>
-  );
-}
-
 export function Landmarks({ onSelect }: { onSelect: SelectHandler }) {
   return (
     <group>
@@ -193,7 +135,6 @@ export function Landmarks({ onSelect }: { onSelect: SelectHandler }) {
       {TREES.map((p, i) => (
         <TreeAt key={i} p={p} s={0.9 + ((i * 37) % 10) / 20} />
       ))}
-      <Clouds />
     </group>
   );
 }

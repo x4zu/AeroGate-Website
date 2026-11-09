@@ -3,6 +3,8 @@
 import { useFrame } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { rig } from "@/lib/rig";
 
 type Channel = "paxGate" | "paxApron" | "vipT" | "arrivePax";
@@ -24,9 +26,15 @@ interface Group {
   crew?: boolean;
 }
 
-const SHIRTS = ["#2449d8", "#e4572e", "#f2a541", "#147598", "#7b5cd6", "#26a69a", "#e94f8a", "#334155", "#f4f5f8", "#8bc34a"];
-const SKIN = ["#f1c7a1", "#d9a37c", "#a8714f", "#f5d3b3", "#c68863"];
+// Soft, saturated "clay figure" palette — matte colours read best at a distance.
+const SHIRTS = ["#2f6fe4", "#e4572e", "#f2b544", "#1f9bb8", "#7b5cd6", "#2bb3a3", "#ec6a9c", "#3d4a63", "#f4f1ea", "#8bc34a", "#5b8def", "#f08a5d"];
+const PANTS = ["#1f2a44", "#2f4a7a", "#34363c", "#c9b48a", "#ece6d8", "#5a4636", "#3c5f8f"];
+const HAIR = ["#2a1b12", "#141110", "#4a2c1a", "#d9b25a", "#8a4a24", "#1d1a18", "#6b3e22"];
+const SKIN = ["#f6cfaa", "#e2ab84", "#b07850", "#f8dcc0", "#cf916a", "#8d5a3b"];
+const SHOES = ["#26262b", "#f2f2f0", "#5a3a26", "#26262b"];
 const CREW = "#ff8a00";
+const CREW_PANTS = "#28324a";
+const CREW_HAT = "#ffd23f";
 
 function buildGroups(): Group[] {
   const groups: Group[] = [];
@@ -155,54 +163,173 @@ function sample(g: Prepared, u: number, out: THREE.Vector3) {
   return out.lerpVectors(g.pts[i - 1], g.pts[i], (d - g.cum[i - 1]) / seg);
 }
 
+/**
+ * Body plan in metres — origin between the feet, facing +Z. Proportions are
+ * slightly toy-like (big head, rounded torso) to match the clay-figure look.
+ */
+const HIP_Y = 0.8;
+const HIP_X = 0.11;
+const SHOULDER_Y = 1.3;
+const SHOULDER_X = 0.27;
+const PARTS = ["torso", "head", "hair", "face", "hat", "leg", "shoe", "arm", "hand"] as const;
+type Part = (typeof PARTS)[number];
+/** Parts that exist once per person; the rest come in left/right pairs. */
+const SINGLE: Part[] = ["torso", "head", "hair", "face", "hat"];
+const PAIRED: Part[] = ["leg", "shoe", "arm", "hand"];
+
+function buildBodyGeometries(): Record<Part, THREE.BufferGeometry> {
+  const eye = (x: number) => new THREE.SphereGeometry(0.03, 8, 6).scale(1, 1.25, 0.6).translate(x, 1.58, 0.196);
+  return {
+    torso: new RoundedBoxGeometry(0.44, 0.58, 0.27, 3, 0.11).translate(0, 1.06, 0),
+    head: new THREE.SphereGeometry(0.21, 20, 16).scale(1, 1.06, 0.98).translate(0, 1.56, 0),
+    hair: new THREE.SphereGeometry(0.226, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.56).rotateX(-0.32).translate(0, 1.58, -0.012),
+    face: mergeGeometries([eye(0.075), eye(-0.075)])!,
+    hat: mergeGeometries([
+      // RoundedBoxGeometry is non-indexed, so the cylinder must be too for the merge.
+      new THREE.CylinderGeometry(0.2, 0.222, 0.13, 20).translate(0, 1.72, 0).toNonIndexed(),
+      new RoundedBoxGeometry(0.3, 0.025, 0.14, 1, 0.01).translate(0, 1.665, 0.2),
+    ])!,
+    // Limbs hang from a pivot at the origin so a single rotation swings them.
+    leg: new THREE.CapsuleGeometry(0.088, 0.6, 4, 10).translate(0, -0.385, 0),
+    shoe: new RoundedBoxGeometry(0.14, 0.085, 0.25, 2, 0.035).translate(0, -0.762, 0.04),
+    arm: new THREE.CapsuleGeometry(0.066, 0.42, 4, 8).translate(0, -0.27, 0),
+    hand: new THREE.SphereGeometry(0.072, 10, 8).translate(0, -0.53, 0),
+  };
+}
+
+const ROUGHNESS: Record<Part, number> = { torso: 0.62, head: 0.5, hair: 0.75, face: 0.3, hat: 0.55, leg: 0.7, shoe: 0.5, arm: 0.62, hand: 0.5 };
+const SHADOW: Record<Part, boolean> = { torso: true, head: true, hair: false, face: false, hat: false, leg: true, shoe: false, arm: false, hand: false };
+
 export function Crowd() {
   const groups = useMemo(() => buildGroups().map(prepare), []);
   const total = groups.reduce((a, g) => a + g.count, 0) + STATIC.length;
-  const bodyRef = useRef<THREE.InstancedMesh>(null);
-  const headRef = useRef<THREE.InstancedMesh>(null);
+  const geo = useMemo(buildBodyGeometries, []);
+  const refs = useRef<Partial<Record<Part, THREE.InstancedMesh | null>>>({});
 
-  const bodyGeo = useMemo(() => new THREE.CapsuleGeometry(0.24, 0.72, 4, 10).translate(0, 0.6, 0), []);
-  const headGeo = useMemo(() => new THREE.SphereGeometry(0.18, 12, 10).translate(0, 1.42, 0), []);
+  /** Per-agent traits, fixed for the session; yaw is eased every frame. */
+  const traits = useMemo(() => {
+    const hasHat = new Uint8Array(total);
+    const yaw = new Float32Array(total);
+    let n = 0;
+    groups.forEach((g) => {
+      for (let i = 0; i < g.count; i++, n++) hasHat[n] = g.crew || n % 9 === 0 || n % 13 === 0 ? 1 : 0;
+    });
+    for (; n < total; n++) hasHat[n] = n % 11 === 0 ? 1 : 0;
+    for (let k = 0; k < total; k++) yaw[k] = (k * 2.39996) % (Math.PI * 2);
+    return { hasHat, yaw };
+  }, [groups, total]);
+
+  const meshes = () => {
+    const r = refs.current;
+    return PARTS.every((p) => r[p]) ? (r as Record<Part, THREE.InstancedMesh>) : null;
+  };
 
   useLayoutEffect(() => {
-    const body = bodyRef.current;
-    const head = headRef.current;
-    if (!body || !head) return;
+    const m = meshes();
+    if (!m) return;
     const c = new THREE.Color();
+    const paint = (n: number, crew: boolean, gi: number) => {
+      const shirt = crew ? CREW : SHIRTS[(n * 7 + gi) % SHIRTS.length];
+      const pants = crew ? CREW_PANTS : PANTS[(n * 5 + gi) % PANTS.length];
+      const skin = SKIN[(n * 3) % SKIN.length];
+      const shoes = SHOES[(n * 11) % SHOES.length];
+      m.torso.setColorAt(n, c.set(shirt));
+      m.head.setColorAt(n, c.set(skin));
+      m.hair.setColorAt(n, c.set(HAIR[(n * 13 + gi) % HAIR.length]));
+      m.face.setColorAt(n, c.set("#1b1b22"));
+      m.hat.setColorAt(n, c.set(crew ? CREW_HAT : n % 2 ? "#f4f4f1" : "#24345c"));
+      for (const k of [0, 1]) {
+        m.leg.setColorAt(n * 2 + k, c.set(pants));
+        m.shoe.setColorAt(n * 2 + k, c.set(shoes));
+        m.arm.setColorAt(n * 2 + k, c.set(shirt));
+        m.hand.setColorAt(n * 2 + k, c.set(skin));
+      }
+    };
     let n = 0;
     groups.forEach((g, gi) => {
-      for (let i = 0; i < g.count; i++, n++) {
-        body.setColorAt(n, c.set(g.crew ? CREW : SHIRTS[(n * 7 + gi) % SHIRTS.length]));
-        head.setColorAt(n, c.set(SKIN[(n * 3) % SKIN.length]));
-      }
+      for (let i = 0; i < g.count; i++, n++) paint(n, !!g.crew, gi);
     });
-    for (let i = 0; i < STATIC.length; i++, n++) {
-      body.setColorAt(n, c.set(SHIRTS[(n * 5) % SHIRTS.length]));
-      head.setColorAt(n, c.set(SKIN[n % SKIN.length]));
-    }
-    if (body.instanceColor) body.instanceColor.needsUpdate = true;
-    if (head.instanceColor) head.instanceColor.needsUpdate = true;
-  }, [groups]);
+    for (; n < total; n++) paint(n, false, 3);
+    for (const p of PARTS) if (m[p].instanceColor) m[p].instanceColor!.needsUpdate = true;
+  }, [groups, total]);
 
-  const m = useMemo(() => new THREE.Matrix4(), []);
-  const pos = useMemo(() => new THREE.Vector3(), []);
-  const q = useMemo(() => new THREE.Quaternion(), []);
-  const one = useMemo(() => new THREE.Vector3(1.08, 1.08, 1.08), []);
-  const zero = useMemo(() => new THREE.Vector3(0, 0, 0), []);
+  const tmp = useMemo(
+    () => ({
+      base: new THREE.Matrix4(),
+      local: new THREE.Matrix4(),
+      rot: new THREE.Matrix4(),
+      out: new THREE.Matrix4(),
+      pos: new THREE.Vector3(),
+      ahead: new THREE.Vector3(),
+      q: new THREE.Quaternion(),
+      up: new THREE.Vector3(0, 1, 0),
+      scale: new THREE.Vector3(0.98, 0.98, 0.98),
+      zero: new THREE.Matrix4().makeScale(0, 0, 0),
+    }),
+    [],
+  );
 
   useFrame(({ clock }) => {
-    const body = bodyRef.current;
-    const head = headRef.current;
-    if (!body || !head) return;
+    const m = meshes();
+    if (!m) return;
+    const { base, local, rot, out, pos, ahead, q, up, scale, zero } = tmp;
     const t = clock.elapsedTime;
+
+    /** Turn agent n toward `ahead`, eased so corners read as a turn, not a snap. */
+    const faceAhead = (n: number) => {
+      const dx = ahead.x - pos.x;
+      const dz = ahead.z - pos.z;
+      if (dx * dx + dz * dz < 1e-6) return;
+      const d = Math.atan2(dx, dz) - traits.yaw[n];
+      traits.yaw[n] += Math.atan2(Math.sin(d), Math.cos(d)) * 0.25;
+    };
+
+    const place = (n: number, visible: boolean, moving: boolean) => {
+      if (!visible) {
+        for (const p of SINGLE) m[p].setMatrixAt(n, zero);
+        for (const p of PAIRED) {
+          m[p].setMatrixAt(n * 2, zero);
+          m[p].setMatrixAt(n * 2 + 1, zero);
+        }
+        return;
+      }
+      const phase = t * 6.2 + n * 1.7;
+      const swing = moving ? Math.sin(phase) * 0.55 : Math.sin(t * 1.3 + n) * 0.04;
+      if (moving) pos.y += Math.abs(Math.cos(phase)) * 0.045;
+      q.setFromAxisAngle(up, traits.yaw[n]);
+      base.compose(pos, q, scale);
+      m.torso.setMatrixAt(n, base);
+      m.head.setMatrixAt(n, base);
+      m.hair.setMatrixAt(n, base);
+      m.face.setMatrixAt(n, base);
+      m.hat.setMatrixAt(n, traits.hasHat[n] ? base : zero);
+      for (const k of [0, 1]) {
+        const side = k === 0 ? 1 : -1;
+        // legs swing in opposite phase per side
+        local.makeTranslation(side * HIP_X, HIP_Y, 0).multiply(rot.makeRotationX(swing * side));
+        out.multiplyMatrices(base, local);
+        m.leg.setMatrixAt(n * 2 + k, out);
+        m.shoe.setMatrixAt(n * 2 + k, out);
+        // arms counter-swing the legs, hanging slightly outward
+        local.makeTranslation(side * SHOULDER_X, SHOULDER_Y, 0).multiply(rot.makeRotationZ(side * 0.09));
+        local.multiply(rot.makeRotationX(-swing * side * 0.8));
+        out.multiplyMatrices(base, local);
+        m.arm.setMatrixAt(n * 2 + k, out);
+        m.hand.setMatrixAt(n * 2 + k, out);
+      }
+    };
+
     let n = 0;
     for (const g of groups) {
+      const step = 0.4 / g.length;
       for (let i = 0; i < g.count; i++, n++) {
         let visible = true;
         let moving = true;
         if (g.mode === "loop") {
           const u = (((t * (g.speed ?? 1)) / g.length + i / g.count) % 1 + 1) % 1;
           sample(g, u, pos);
+          sample(g, (u + step) % 1, ahead);
+          faceAhead(n);
         } else {
           const spread = g.spread ?? 0.05;
           const u = rig[g.channel!] * (1 + spread * (g.count - 1)) - spread * i;
@@ -211,38 +338,43 @@ export function Crowd() {
             if (g.before === "hide") visible = false;
             else {
               const [qx, qz] = g.queueDir ?? [-1, 0];
-              pos.copy(g.pts[0]).add(new THREE.Vector3(qx * i * 0.8, 0, qz * i * 0.8 + (i % 2) * 0.35));
+              pos.copy(g.pts[0]).add(ahead.set(qx * i * 0.8, 0, qz * i * 0.8 + (i % 2) * 0.35));
+              ahead.copy(g.pts[0]); // the queue faces the gate
+              faceAhead(n);
             }
           } else if (u >= 1) {
             visible = false;
           } else {
             sample(g, u, pos);
+            sample(g, Math.min(1, u + step), ahead);
+            faceAhead(n);
           }
         }
-        if (visible && moving) pos.y += Math.abs(Math.sin(t * 7 + n)) * 0.06;
-        m.compose(pos, q, visible ? one : zero);
-        body.setMatrixAt(n, m);
-        head.setMatrixAt(n, m);
+        place(n, visible, moving);
       }
     }
     for (let i = 0; i < STATIC.length; i++, n++) {
       pos.set(...STATIC[i]);
-      m.compose(pos, q, one);
-      body.setMatrixAt(n, m);
-      head.setMatrixAt(n, m);
+      place(n, true, false);
     }
-    body.instanceMatrix.needsUpdate = true;
-    head.instanceMatrix.needsUpdate = true;
+    for (const p of PARTS) m[p].instanceMatrix.needsUpdate = true;
   });
 
   return (
     <group>
-      <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, total]} castShadow frustumCulled={false}>
-        <meshStandardMaterial roughness={0.7} />
-      </instancedMesh>
-      <instancedMesh ref={headRef} args={[headGeo, undefined, total]} castShadow frustumCulled={false}>
-        <meshStandardMaterial roughness={0.6} />
-      </instancedMesh>
+      {PARTS.map((p) => (
+        <instancedMesh
+          key={p}
+          ref={(el) => {
+            refs.current[p] = el;
+          }}
+          args={[geo[p], undefined, SINGLE.includes(p) ? total : total * 2]}
+          castShadow={SHADOW[p]}
+          frustumCulled={false}
+        >
+          <meshStandardMaterial roughness={ROUGHNESS[p]} />
+        </instancedMesh>
+      ))}
     </group>
   );
 }

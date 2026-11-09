@@ -3,6 +3,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { rig } from "@/lib/rig";
 import { useModel } from "./useModel";
 
@@ -23,10 +24,32 @@ const frame = "#2a3346";
 
 type V3 = [number, number, number];
 
-function Box({ size, pos, color, rot, ...mat }: { size: V3; pos: V3; color: string; rot?: V3 } & Partial<THREE.MeshStandardMaterialParameters>) {
+/**
+ * Soft-edged box geometry, shared by size. Every slab and counter gets a small
+ * bevel so the terminal reads like a smooth, toy-like model instead of raw CAD.
+ */
+const roundedCache = new Map<string, THREE.BufferGeometry>();
+function rounded(size: V3, radius?: number) {
+  const r = Math.min(radius ?? 0.12, Math.min(...size) * 0.45);
+  const key = `${size.join(",")}|${r}`;
+  let g = roundedCache.get(key);
+  if (!g) {
+    g = new RoundedBoxGeometry(size[0], size[1], size[2], 3, r);
+    roundedCache.set(key, g);
+  }
+  return g;
+}
+
+function Box({
+  size,
+  pos,
+  color,
+  rot,
+  radius,
+  ...mat
+}: { size: V3; pos: V3; color: string; rot?: V3; radius?: number } & Partial<THREE.MeshStandardMaterialParameters>) {
   return (
-    <mesh position={pos} rotation={rot} castShadow receiveShadow>
-      <boxGeometry args={size} />
+    <mesh position={pos} rotation={rot} geometry={rounded(size, radius)} castShadow receiveShadow>
       <meshStandardMaterial color={color} roughness={0.6} {...mat} />
     </mesh>
   );
@@ -36,11 +59,11 @@ function GlassWalls() {
   const glass = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: "#9fcdf2",
-        roughness: 0.05,
-        metalness: 0.25,
+        color: "#a9d8fb",
+        roughness: 0.04,
+        metalness: 0.35,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.26,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
@@ -73,7 +96,7 @@ function GlassWalls() {
         <planeGeometry args={[D, TH]} />
       </mesh>
       {mullions.map((p, i) => (
-        <Box key={i} size={[0.22, TH, 0.22]} pos={p} color={frame} metalness={0.4} />
+        <Box key={i} size={[0.22, TH, 0.22]} pos={p} color={frame} metalness={0.4} roughness={0.35} radius={0.1} />
       ))}
       {/* transoms */}
       {[3.2, 6.2].map((y) => (
@@ -116,8 +139,7 @@ function Roof() {
   ];
   return (
     <group ref={ref}>
-      <mesh position={[CX, TH + 0.4, CZ]} castShadow receiveShadow>
-        <boxGeometry args={[W + 1.6, 0.8, D + 1.6]} />
+      <mesh position={[CX, TH + 0.4, CZ]} geometry={rounded([W + 1.6, 0.8, D + 1.6], 0.38)} castShadow receiveShadow>
         <meshStandardMaterial ref={register} color={navy} roughness={0.7} />
       </mesh>
       {/* orange rim, echoing the illustration */}
@@ -129,20 +151,17 @@ function Roof() {
           [[0.8, 1.3, D + 2.4], [TX1 + 0.8, TH + 0.65, CZ]],
         ] as [V3, V3][]
       ).map(([s, p], i) => (
-        <mesh key={i} position={p} castShadow>
-          <boxGeometry args={s} />
+        <mesh key={i} position={p} geometry={rounded(s, 0.38)} castShadow>
           <meshStandardMaterial ref={register} color={orange} roughness={0.45} />
         </mesh>
       ))}
       {/* skylight strip */}
-      <mesh position={[CX, TH + 0.85, CZ]}>
-        <boxGeometry args={[W - 20, 0.12, 3]} />
+      <mesh position={[CX, TH + 0.85, CZ]} geometry={rounded([W - 20, 0.12, 3], 0.05)}>
         <meshStandardMaterial ref={register} color="#8fc3ef" roughness={0.1} metalness={0.3} />
       </mesh>
       {acUnits.map((p, i) => (
         <group key={i} position={[p[0], TH + 0.8, p[2]]}>
-          <mesh position={[0, 0.6, 0]} castShadow>
-            <boxGeometry args={[4.4, 1.2, 2.6]} />
+          <mesh position={[0, 0.6, 0]} geometry={rounded([4.4, 1.2, 2.6], 0.3)} castShadow>
             <meshStandardMaterial ref={register} color="#e4e7ee" />
           </mesh>
           {[-1, 1].map((s) => (
@@ -237,11 +256,10 @@ function Carousel({ x, z }: { x: number; z: number }) {
             for (let i = 0; i < count; i++) im.setColorAt(i, c.set(colors[i % colors.length]));
           }
         }}
-        args={[undefined, undefined, count]}
+        args={[rounded([0.75, 0.42, 0.55], 0.1), undefined, count]}
         castShadow
         frustumCulled={false}
       >
-        <boxGeometry args={[0.75, 0.42, 0.55]} />
         <meshStandardMaterial roughness={0.5} />
       </instancedMesh>
     </group>
@@ -270,7 +288,7 @@ function Interior() {
   return (
     <group>
       {/* floor */}
-      <Box size={[W, 0.3, D]} pos={[CX, 0.15, CZ]} color="#f3f4f7" roughness={0.35} />
+      <Box size={[W, 0.3, D]} pos={[CX, 0.15, CZ]} color="#f4f2ee" roughness={0.22} metalness={0.05} radius={0.05} />
       {/* landside / airside divider with a gap for security */}
       <Box size={[42, 2.2, 0.15]} pos={[-77, 1.4, -23.5]} color="#a9d3f5" transparent opacity={0.45} />
       <Box size={[72, 2.2, 0.15]} pos={[-6, 1.4, -23.5]} color="#a9d3f5" transparent opacity={0.45} />

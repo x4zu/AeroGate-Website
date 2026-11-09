@@ -13,6 +13,7 @@ import { Fleet, type SelectHandler } from "./Fleet";
 import { Ground } from "./Ground";
 import { Labels } from "./Labels";
 import { Landmarks } from "./Landmarks";
+import { Sky, SKY_HORIZON } from "./Sky";
 import { Terminal } from "./Terminal";
 import { preloadModels } from "./useModel";
 
@@ -35,9 +36,8 @@ export default function AirportCanvas({ onSelect }: { onSelect: SelectHandler })
       gl={{ antialias: true, toneMapping: THREE.NeutralToneMapping, toneMappingExposure: 0.92 }}
       className="!absolute inset-0"
     >
-      <color attach="background" args={["#eef1f8"]} />
-      <fog attach="fog" args={["#eef1f8", 420, 1300]} />
-      <hemisphereLight args={["#ffffff", "#b9bfcc", 0.75]} />
+      <fog attach="fog" args={[SKY_HORIZON, 420, 1300]} />
+      <hemisphereLight args={["#cfe4ff", "#b9bfcc", 0.8]} />
       <directionalLight
         castShadow
         position={[90, 150, 70]}
@@ -65,6 +65,7 @@ export default function AirportCanvas({ onSelect }: { onSelect: SelectHandler })
         <AmbientTraffic />
         <Fleet onSelect={onSelect} />
         <Landmarks onSelect={onSelect} />
+        <Sky />
         <Crowd />
         <Labels onSelect={onSelect} />
         <Ready />

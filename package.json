@@ -10,7 +10,7 @@
     "url": "https://github.com/x2zu/AeroGate-Website.git"
   },
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",

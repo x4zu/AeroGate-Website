@@ -14,4 +14,4 @@ Catatan perbaikan bug, terbaru di atas. Cari dulu dengan `grep -n -i "<gejala>" 
 | **Verifikasi** | Headless Chrome + CDP (`next start`, tunggu 30 s). Sebelum: canvas blank, 25+ exception. Sesudah: 0 error/exception, canvas `1422x804` webgl2 merender terminal, crowd, langit, dan awan di 6 posisi scroll. |
 | **Pelajaran** | Sebelum `mergeGeometries`, samakan status index semua input. Geometry dari `three/examples` (RoundedBox) non-indexed, geometry bawaan (Sphere/Cylinder/Capsule) indexed. Verifikasi scene 3D lewat console browser, karena `tsc`/`eslint`/`next build` semuanya lolos untuk bug ini. |
 | **Log Keyword** | `mergeGeometries`, `index attribute`, canvas blank, crowd, hat |
-| **Deploy** | Di-push ke `main` 2026-11-09; status build Vercel belum diverifikasi |
+| **Deploy** | ✅ LIVE 2026-11-09 — commit `d4b4150`, Vercel production Ready (25 s), aerogate-website.vercel.app |

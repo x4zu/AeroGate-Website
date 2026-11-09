@@ -49,7 +49,7 @@ export function Footer() {
         </div>
         <hr className="my-10 border-ink/10" />
         <div className="flex flex-col justify-between gap-3 text-[13px] text-ink-soft sm:flex-row">
-          <p>© 2026 AeroGate. Konsep demo.</p>
+          <p>© 2026 AeroGate · Made by <span className="font-medium text-ink">Reivan Elsyafir Pratama</span></p>
           <p>Ilustrasi bandara isometrik · Alur boarding interaktif</p>
         </div>
       </div>

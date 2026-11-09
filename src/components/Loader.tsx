@@ -79,6 +79,7 @@ export function Loader() {
         </span>
       </div>
       <p className="mt-6 text-[14px] font-medium tracking-[-0.005em] text-ink-soft">Membangun bandara 3D</p>
+      <p className="absolute bottom-8 text-[12px] text-ink-soft/70">Made by Reivan Elsyafir Pratama</p>
     </div>
   );
 }

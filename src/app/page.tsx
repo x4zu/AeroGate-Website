@@ -5,6 +5,7 @@ import { Loader } from "@/components/Loader";
 import { Navbar } from "@/components/Navbar";
 import { StatsSection } from "@/components/StatsSection";
 import { TicketSection } from "@/components/TicketSection";
+import { Watermark } from "@/components/Watermark";
 import { ZonesSection } from "@/components/ZonesSection";
 
 export default function Home() {
@@ -20,6 +21,7 @@ export default function Home() {
         <TicketSection />
       </main>
       <Footer />
+      <Watermark />
     </>
   );
 }

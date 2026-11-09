@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Interactive 3D airport website that walks passengers through the full boarding flow — built with Next.js, React Three Fiber, GSAP and Matter.js.",
+  "author": "Reivan Elsyafir Pratama",
   "license": "MIT",
   "repository": {
     "type": "git",

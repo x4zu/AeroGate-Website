@@ -15,6 +15,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  authors: [{ name: "Reivan Elsyafir Pratama" }],
+  creator: "Reivan Elsyafir Pratama",
   title: "AeroGate — Alur boarding pesawat, dari kurb ke kabin",
   description:
     "Jelajahi bandara isometrik yang hidup: dari kedatangan, check-in, keamanan, boarding, hingga lepas landas dan bagasi.",

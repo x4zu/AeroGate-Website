@@ -1,5 +1,7 @@
 # AeroGate — Interactive 3D Boarding Experience
 
+> **Made by Reivan Elsyafir Pratama**
+
 AeroGate is a scroll-driven 3D website that follows a passenger through an airport, from the curb to the cabin and back to baggage claim. A full low-poly airport, with a terminal, two runways, a city and moving traffic, renders in real time in the browser. The camera, the passengers, the buses and the aircraft all react to scrolling.
 
 ![Stack](https://img.shields.io/badge/Next.js-16-black) ![Three.js](https://img.shields.io/badge/Three.js-0.187-049ef4) ![R3F](https://img.shields.io/badge/React%20Three%20Fiber-9-222) ![GSAP](https://img.shields.io/badge/GSAP-3-88ce02) ![Matter.js](https://img.shields.io/badge/Matter.js-0.20-4b5563)
@@ -139,6 +141,10 @@ docker run -p 3000:3000 aerogate
 - Passengers, houses, trees, clouds and city cars use `InstancedMesh`, one draw call per type.
 - The shadow map is 4096² on desktop and 2048² on mobile; the device pixel ratio is capped at 1.75.
 - Scroll state lives outside React, so scrolling never triggers component re-renders.
+
+## Author
+
+Designed and built by **Reivan Elsyafir Pratama**.
 
 ## License
 
